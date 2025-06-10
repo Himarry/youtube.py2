@@ -191,6 +191,7 @@ cython_debug/
 #  exclude from AI features like autocomplete and code analysis. Recommended for sensitive data
 #  refer to https://docs.cursor.com/context/ignore-files
 .cursorignore
+<<<<<<< HEAD
 .cursorindexingignore
 
 # youtube_py2配下の全pyファイルを無視
@@ -207,3 +208,6 @@ setup.py
 .vscode
 .lh
 .history
+=======
+.cursorindexingignore
+>>>>>>> b29d592b833b9e2b03fc9c871aff993904e0be0f
