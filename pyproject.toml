@@ -1,0 +1,14 @@
+[build-system]
+requires = ["setuptools>=42", "Cython", "Nuitka"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "youtube_py2"
+version = "0.0.1"
+description = "YouTube Data API v3 Python Wrapper Library (py2)"
+authors = [
+    { name = "Himarry" }
+]
+license = {text = "MIT"}
+readme = "README.md"
+requires-python = ">=3.8"
