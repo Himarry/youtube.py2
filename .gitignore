@@ -210,5 +210,5 @@ setup.py
 .vscode
 .lh
 .history
-
+generate_public_key.py
 test_license_paid_feature.py
