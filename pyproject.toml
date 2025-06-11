@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "youtube_py2"
-version = "0.0.21"
+version = "1.0.6"
 description = "YouTube Data API v3 Python Wrapper Library (py2)"
 authors = [
     { name = "Himarry" }
@@ -14,4 +14,6 @@ readme = "README.md"
 requires-python = ">=3.8"
 
 [tool.setuptools.package-data]
-"youtube_py2" = ["*.pyd"]
+"youtube_py2" = ["*.pyd", "*.pyi", "binary_hashes.json"]
+[tool.setuptools.exclude-package-data]
+"youtube_py2" = ["*.py"]

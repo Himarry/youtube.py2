@@ -1,0 +1,5 @@
+# MANIFEST.in
+# .pyファイルを全て除外し、.pyd/.pyi/binary_hashes.jsonのみを含める
+prune youtube_py2
+recursive-include src/youtube_py2 *.pyd *.pyi binary_hashes.json
+include src/youtube_py2/_bootstrap*.pyd

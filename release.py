@@ -318,10 +318,11 @@ def build_binary_package():
     """完全バイナリ化パッケージをビルド（Nuitkaのみ）"""
     print("4. 完全バイナリ化パッケージをビルド中...")
     import glob
-    nuitka_targets = [str(f) for f in Path('youtube_py2').glob('*.py') if f.name != '__init__.py']
+    # _bootstrap.py のみバイナリ化対象
+    nuitka_targets = [str(Path('youtube_py2') / '_bootstrap.py')]
     if not nuitka_targets:
-        print("❌ Nuitkaビルド対象となる.pyファイルが1つも見つかりません（__init__.py以外）。最低1つ必要です。")
-        print("💡 youtube_py2/ に__init__.py以外の.pyファイルを配置してください。")
+        print("❌ Nuitkaビルド対象となる.pyファイルが1つも見つかりません。最低1つ必要です。")
+        print("💡 youtube_py2/ に_bootstrap.pyを配置してください。")
         return False
     else:
         project_root = str(Path(__file__).parent.resolve())
