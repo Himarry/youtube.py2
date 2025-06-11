@@ -10,6 +10,7 @@ import re
 import shutil
 from pathlib import Path
 import argparse
+import concurrent.futures
 
 # --- 追加: パッケージ名を引数で指定できるようにする ---
 def get_package_name():
@@ -66,18 +67,20 @@ def get_upload_target_interactive():
 
 
 def show_current_version():
-    """現在のバージョンを表示（ルート直下__init__.py対応）"""
-    init_file = Path('__init__.py')
-    if init_file.exists():
-        try:
-            content = init_file.read_text(encoding='utf-8')
-            version_match = re.search(r'__version__\s*=\s*[\'"]([^\'"]+)[\'"]', content)
-            if version_match:
-                current_version = version_match.group(1)
-                print(f"📌 現在のバージョン: {current_version}")
-                return current_version
-        except Exception as e:
-            print(f"⚠️ バージョン取得エラー: {e}")
+    """現在のバージョンを表示（youtube_py2/youtube_py2/__init__.py対応）"""
+    init_file = Path('youtube_py2') / '__init__.py'
+    if not init_file.exists():
+        print(f"⚠️ {init_file} が見つかりません")
+        return "不明"
+    try:
+        content = init_file.read_text(encoding='utf-8')
+        version_match = re.search(r'__version__\s*=\s*[\'"]([^\'"]+)[\'"]', content)
+        if version_match:
+            current_version = version_match.group(1)
+            print(f"📌 現在のバージョン: {current_version}")
+            return current_version
+    except Exception as e:
+        print(f"⚠️ バージョン取得エラー: {e}")
     print("⚠️ 現在のバージョンを取得できませんでした")
     return "不明"
 
@@ -136,8 +139,8 @@ def confirm_release(version_type, upload_target, current_version, new_version):
 
 # 既存の関数はそのまま維持...
 def bump_version(version_type='patch'):
-    """バージョンを自動的に更新（ルート直下__init__.py対応）"""
-    init_file = Path('__init__.py')
+    """バージョンを自動的に更新（youtube_py2/youtube_py2/__init__.py対応）"""
+    init_file = Path('youtube_py2') / '__init__.py'
     if not init_file.exists():
         print(f"警告: {init_file} が見つかりません。新規作成します。")
         current_version = "0.0.0"
@@ -207,11 +210,10 @@ def bump_version(version_type='patch'):
 
 
 def run_command_safely(command, description="", cwd=None):
-    """安全にコマンドを実行（cwd指定対応）"""
+    """安全にコマンドを実行（cwd指定対応、常に詳細出力）"""
     if description:
         print(f"実行中: {description}")
     print(f"コマンド: {command}")
-    
     try:
         env = os.environ.copy()
         env['PYTHONIOENCODING'] = 'utf-8'
@@ -229,26 +231,13 @@ def run_command_safely(command, description="", cwd=None):
             cwd=cwd
         )
         if result.stdout.strip():
-            print(result.stdout)
+            print("[stdout]", result.stdout)
+        if result.stderr.strip():
+            print("[stderr]", result.stderr)
         if result.returncode == 0:
             return True
         else:
             print(f"コマンド失敗 (終了コード: {result.returncode})")
-            if result.stderr.strip():
-                stderr_lines = result.stderr.split('\n')
-                filtered_lines = []
-                skip_patterns = [
-                    '_DeprecatedInstaller',
-                    'fetch_build_eggs are deprecated',
-                    'FutureWarning: Cython directive',
-                    'DeprecationWarning:'
-                ]
-                for line in stderr_lines:
-                    if not any(pattern in line for pattern in skip_patterns):
-                        filtered_lines.append(line)
-                filtered_stderr = '\n'.join(filtered_lines).strip()
-                if filtered_stderr:
-                    print(f"エラー: {filtered_stderr}")
             return False
     except Exception as e:
         print(f"コマンド実行エラー: {e}")
@@ -269,10 +258,24 @@ def run_command_with_fallback(commands, descriptions=None, cwd=None):
 def clean_build_artifacts():
     """ビルド成果物をクリーンアップ（バイナリビルド対応）"""
     print("2. ビルド成果物をクリーンアップ中...")
-    
-    patterns = ['build', 'dist', '*.egg-info', '.eggs', '**/*.c', '**/*.pyx', '**/*.html', f'{PACKAGE_NAME}/*.c', f'{PACKAGE_NAME}/*.pyx']
+    # src/配下やsrc/youtube_py2/のバイナリは絶対に消さない
+    patterns = [
+        'build',
+        'dist',
+        '*.egg-info',
+        '.eggs',
+        '**/*.c',
+        '**/*.pyx',
+        '**/*.html',
+        f'{PACKAGE_NAME}/*.c',
+        f'{PACKAGE_NAME}/*.pyx',
+        # 'src/', 'src/youtube_py2/', 'src/youtube_py2/*.pyd', 'src/youtube_py2/*.so' などは絶対に含めない
+    ]
     for pattern in patterns:
         for path in Path('.').glob(pattern):
+            # src/配下は絶対に消さない
+            if str(path).startswith('src'):
+                continue
             if path.is_dir():
                 try:
                     shutil.rmtree(path)
@@ -314,30 +317,88 @@ def install_dependencies():
 def build_binary_package():
     """完全バイナリ化パッケージをビルド（Nuitkaのみ）"""
     print("4. 完全バイナリ化パッケージをビルド中...")
-    # --- Nuitkaビルド ---
     import glob
-    nuitka_targets = []
-    for folder in ["youtube_py2", "src/youtube_py2"]:
-        nuitka_targets.extend(glob.glob(f"{folder}/*.py"))
-    # __init__.pyを除外
-    nuitka_targets = [f for f in nuitka_targets if not f.endswith("__init__.py")]
+    nuitka_targets = [str(f) for f in Path('youtube_py2').glob('*.py') if f.name != '__init__.py']
     if not nuitka_targets:
         print("❌ Nuitkaビルド対象となる.pyファイルが1つも見つかりません（__init__.py以外）。最低1つ必要です。")
-        print("💡 youtube_py2/ または src/youtube_py2/ に__init__.py以外の.pyファイルを配置してください。")
-        return False  # ここでリリース処理を中断
+        print("💡 youtube_py2/ に__init__.py以外の.pyファイルを配置してください。")
+        return False
     else:
-        nuitka_commands = []
-        nuitka_descriptions = []
-        for pyfile in nuitka_targets:
-            nuitka_commands.append(
-                f"python -m nuitka --module {pyfile} --output-dir=src/youtube.py2 --remove-output --nofollow-imports --plugin-enable=numpy"
-            )
-            nuitka_descriptions.append(f"Nuitkaで暗号化バイナリ(.pyd/.so)をsrc/youtube.py2に生成: {pyfile}")
-        print("\n🔒 Nuitkaで暗号化バイナリをビルド中... (複数ファイル対応)")
-        if not run_command_with_fallback(nuitka_commands, nuitka_descriptions, cwd=None):
-            print("⚠️ Nuitkaによる暗号化バイナリビルドに失敗しました")
-            return False
+        project_root = str(Path(__file__).parent.resolve())
+        def build_one(pyfile):
+            print(f"--- Nuitkaビルド開始: {pyfile} ---")
+            cmd = f"python -m nuitka --module {pyfile} --output-dir=src/youtube_py2 --remove-output --nofollow-imports --plugin-enable=numpy"
+            ok = run_command_safely(cmd, f"Nuitkaで暗号化バイナリ(.pyd/.so)をsrc/youtube_py2に生成: {pyfile}", cwd=project_root)
+            if ok:
+                print(f"--- Nuitkaビルド完了: {pyfile} ---")
+            else:
+                print(f"⚠️ Nuitkaビルド失敗: {pyfile}")
+            return ok
+        # 並列ビルド
+        with concurrent.futures.ThreadPoolExecutor(max_workers=os.cpu_count()) as executor:
+            results = list(executor.map(build_one, nuitka_targets))
+        if not all(results):
+            print("⚠️ 一部のNuitkaビルドに失敗しました")
+    # ビルド後のバイナリ一覧を表示
+    print("\n[ビルド直後のsrc/youtube_py2/バイナリ一覧]")
+    bin_files = list(Path('src/youtube_py2').glob('*.pyd')) + list(Path('src/youtube_py2').glob('*.so'))
+    if not bin_files:
+        print("⚠️ src/youtube_py2/にバイナリが1つもありません")
+    else:
+        for f in bin_files:
+            print(f"  - {f.name}")
+        if len(bin_files) != len(nuitka_targets):
+            print(f"⚠️ Nuitkaでバイナリ化された数({len(bin_files)})と.pyファイル数({len(nuitka_targets)})が一致しません")
+    # --- バイナリハッシュ自動生成・保存 ---
+    import hashlib
+    import json
+    import base64
+    import time
+    # --- 署名用秘密鍵のパス（PEM形式/RSA2048推奨）---
+    SIGN_KEY_PATH = Path('証明書/device_key.pem')
+    from cryptography.hazmat.primitives import hashes as c_hashes, serialization
+    from cryptography.hazmat.primitives.asymmetric import padding
+    from cryptography.hazmat.backends import default_backend
 
+    hashes = {}
+    for f in bin_files:
+        with open(f, 'rb') as fp:
+            data = fp.read()
+            sha256 = hashlib.sha256(data).hexdigest()
+            sha512 = hashlib.sha512(data).hexdigest()
+            blake2b = hashlib.blake2b(data).hexdigest()
+            size = len(data)
+            mtime = int(f.stat().st_mtime)
+            hashes[f.name] = {
+                'sha256': sha256,
+                'sha512': sha512,
+                'blake2b': blake2b,
+                'size': size,
+                'mtime': mtime
+            }
+    # --- 署名生成 ---
+    # 署名対象はハッシュ部のみ
+    hash_bytes = json.dumps(hashes, sort_keys=True, separators=(",", ":")).encode('utf-8')
+    if SIGN_KEY_PATH.exists():
+        with open(SIGN_KEY_PATH, 'rb') as kf:
+            private_key = serialization.load_pem_private_key(kf.read(), password=None, backend=default_backend())
+        signature = private_key.sign(
+            hash_bytes,
+            padding.PKCS1v15(),
+            c_hashes.SHA256()
+        )
+        signature_b64 = base64.b64encode(signature).decode('ascii')
+    else:
+        signature_b64 = None
+    out = {
+        'hashes': hashes,
+        'signature': signature_b64,
+        'signed_at': int(time.time())
+    }
+    hash_json_path = Path('src/youtube_py2') / 'binary_hashes.json'
+    with open(hash_json_path, 'w', encoding='utf-8') as fp:
+        json.dump(out, fp, ensure_ascii=False, indent=2)
+    print(f"\n🔒 バイナリ多重ハッシュ＋署名を {hash_json_path} に保存しました ({len(hashes)} 件)")
     # --- Wheelパッケージビルド ---
     build_commands = [
         "python -m build --wheel",
@@ -349,6 +410,19 @@ def build_binary_package():
         "分離環境を使わないWheelビルド",
         "従来のsetup.pyを使用したWheelビルド"
     ]
+    # --- binary_hashes.jsonの存在確認・内容表示 ---
+    hashes_path = Path('src/youtube_py2/binary_hashes.json')
+    if hashes_path.exists():
+        print(f"\n[バイナリハッシュファイル検出: {hashes_path}]")
+        try:
+            import json
+            hashes = json.loads(hashes_path.read_text(encoding='utf-8'))
+            for k, v in hashes.items():
+                print(f"  {k}: {v}")
+        except Exception as e:
+            print(f"⚠️ binary_hashes.jsonの読み込み失敗: {e}")
+    else:
+        print("⚠️ binary_hashes.jsonが見つかりません。バイナリ改ざん検知が無効化されます")
     print("\n🔄 Wheelパッケージをビルド中...")
     if run_command_with_fallback(build_commands, descriptions, cwd=None):
         print("✅ バイナリWheelビルド完了")
@@ -448,15 +522,15 @@ def upload_to_pypi():
 
 
 def copy_binaries_to_src():
-    """バイナリ(.pyd/.so)をsrc/配下に自動コピー（distパス修正）"""
+    """バイナリ(.pyd/.so)をsrc/youtube_py2/配下に自動コピー"""
     import glob
     import shutil
-    src_dir = Path('src') / PACKAGE_NAME
+    src_dir = Path('src') / 'youtube_py2'
     src_dir.mkdir(parents=True, exist_ok=True)
-    patterns = [f'youtube_py2/*.pyd', f'youtube_py2/*.so']
-    for pattern in patterns:
-        for file in glob.glob(pattern):
-            dest = src_dir / Path(file).name
+    # youtube_py2/配下の全pyd/soをコピー
+    for ext in ('.pyd', '.so'):
+        for file in Path('youtube_py2').glob(f'*{ext}'):
+            dest = src_dir / file.name
             shutil.copy2(file, dest)
             print(f"コピー: {file} → {dest}")
 
@@ -485,13 +559,19 @@ def release(version_type='patch', upload_target='testpypi'):
     # 4. バイナリビルド
     if not build_binary_package():
         return False
-    
     # 5. バイナリビルド結果確認
+    print("\n[copy_binaries_to_src直前のsrc/youtube_py2/バイナリ一覧]")
+    bin_files = list(Path('src/youtube_py2').glob('*.pyd')) + list(Path('src/youtube_py2').glob('*.so'))
+    for f in bin_files:
+        print(f"  - {f.name}")
     if not verify_binary_build():
         return False
     # 追加: src/配下にバイナリコピー
     copy_binaries_to_src()
-    
+    print("\n[copy_binaries_to_src直後のsrc/youtube_py2/バイナリ一覧]")
+    bin_files = list(Path('src/youtube_py2').glob('*.pyd')) + list(Path('src/youtube_py2').glob('*.so'))
+    for f in bin_files:
+        print(f"  - {f.name}")
     # 6. アップロード
     if upload_target == "testpypi":
         print("\n5. TestPyPIにバイナリパッケージをアップロード中...")
@@ -523,6 +603,64 @@ def release(version_type='patch', upload_target='testpypi'):
         print(f"  TestPyPI: twine upload --repository testpypi dist/*.whl")
         print(f"  PyPI: twine upload dist/*.whl")
         return True
+
+    # --- バイナリビルド・パッケージ化 ---
+    if not build_binary_package():
+        print("❌ バイナリパッケージ化に失敗しました。リリース中断。")
+        return
+    # --- 改ざん検知テスト ---
+    try:
+        import importlib.util
+        import sys
+        # youtube_py2/__init__.py の verify_binaries 関数を呼び出し
+        spec = importlib.util.spec_from_file_location("youtube_py2", str(Path("youtube_py2/__init__.py")))
+        youtube_py2 = importlib.util.module_from_spec(spec)
+        sys.modules["youtube_py2"] = youtube_py2
+        spec.loader.exec_module(youtube_py2)
+        if hasattr(youtube_py2, "verify_binaries"):
+            print("\n🔍 バイナリ改ざん検知テストを実行...")
+            youtube_py2.verify_binaries()
+            print("✅ バイナリ改ざん検知テスト完了")
+        else:
+            print("⚠️ verify_binaries() 関数が __init__.py に見つかりません")
+    except Exception as e:
+        print(f"⚠️ バイナリ改ざん検知テスト中に例外: {e}")
+
+
+def test_binary_tamper_detection():
+    """
+    analytics.cp310-win_amd64.pyd を一時的に壊して verify_binaries() の改ざん検知をテストする。
+    テスト後は元に戻す。
+    """
+    import sys
+    from pathlib import Path
+    import time
+    from youtube_py2 import verify_binaries
+    pyd_path = Path("src/youtube_py2/analytics.cp310-win_amd64.pyd")
+    backup_path = pyd_path.with_suffix(".bak")
+    # バックアップ
+    shutil.copy2(pyd_path, backup_path)
+    try:
+        # 1バイト壊す
+        with open(pyd_path, "r+b") as f:
+            f.seek(0, 2)
+            size = f.tell()
+            if size > 0:
+                f.seek(size - 1)
+                last = f.read(1)
+                f.seek(size - 1)
+                f.write(bytes([(last[0] ^ 0xFF) & 0xFF]))
+        print("[テスト] バイナリを一時的に壊しました。改ざん検知を実行します...")
+        try:
+            verify_binaries()
+        except Exception as e:
+            print(f"[OK] 改ざん検知が発動: {e}")
+        else:
+            print("[NG] 改ざん検知が発動しませんでした")
+    finally:
+        # 元に戻す
+        shutil.move(backup_path, pyd_path)
+        print("[テスト] バイナリを元に戻しました")
 
 
 def main():

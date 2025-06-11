@@ -210,3 +210,5 @@ setup.py
 .vscode
 .lh
 .history
+
+test_license_paid_feature.py
