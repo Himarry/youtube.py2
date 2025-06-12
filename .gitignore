@@ -194,7 +194,6 @@ cython_debug/
 .cursorindexingignore
 
 # youtube_py2ディレクトリ（プロジェクト直下）は非公開
-/youtube_py2/
 # ただしsrc/youtube_py2/は公開したい場合は除外
 !src/youtube_py2/
 
