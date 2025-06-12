@@ -4,21 +4,19 @@ __version__ = "1.0.23"
 import os
 import sys
 
-def _run_security_checks():
+if os.environ.get("YOUTUBE_PY2_DEBUG", "") == "1":
     try:
-        from youtube_py2 import _bootstrap
+        from . import _bootstrap
         print(f"[DEBUG] _bootstrap: {_bootstrap}")
-        if not hasattr(_bootstrap, '_detect_debugger') or _bootstrap._detect_debugger is None:
+        if hasattr(_bootstrap, '_detect_debugger') and _bootstrap._detect_debugger is not None:
+            _bootstrap._detect_debugger()
+            _bootstrap._internal_update()
+        else:
             print("[アンチデバッグ] _detect_debugger が None です。スキップします。", file=sys.stderr)
-            return
-        _bootstrap._detect_debugger()
-        _bootstrap._internal_update()
     except Exception as e:
         print(f"[アンチデバッグ] {e}", file=sys.stderr)
-        # 強制終了を防ぐためコメントアウト
-        # os._exit(1)
+        # os._exit(1)  # PyPI公開物では強制終了は基本入れない
 
-_run_security_checks()
 
 # 主要APIクラスをトップレベルで再エクスポート
 from .video import YouTubeVideo

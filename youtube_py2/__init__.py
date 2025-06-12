@@ -1,23 +1,9 @@
 # youtube_py2 パッケージ初期化ファイル
-__version__ = "1.0.24"
+__version__ = "1.0.26"
 
 import os
 import sys
 
-def _run_security_checks():
-    try:
-        from youtube_py2 import _bootstrap
-        print(f"[DEBUG] _bootstrap: {_bootstrap}")
-        if not hasattr(_bootstrap, '_detect_debugger') or _bootstrap._detect_debugger is None:
-            print("[アンチデバッグ] _detect_debugger が None です。スキップします。", file=sys.stderr)
-            return
-        _bootstrap._detect_debugger()
-        _bootstrap._internal_update()
-    except Exception as e:
-        print(f"[アンチデバッグ] {e}", file=sys.stderr)
-        os._exit(1)
-
-_run_security_checks()
 
 # 主要APIクラスをトップレベルで再エクスポート
 from .video import YouTubeVideo
