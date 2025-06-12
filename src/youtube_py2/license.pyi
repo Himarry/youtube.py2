@@ -3,6 +3,7 @@
 # Stubs included by default
 from __future__ import annotations
 from typing import Any
+from youtube_py2 import _bootstrap
 import os
 
 def require_device_cert(cert_path: Any) -> Any:
@@ -14,5 +15,7 @@ __name__ = ...
 
 
 # Modules used internally, to allow implicit dependencies to be seen:
+import youtube_py2
+import youtube_py2._bootstrap
 import os
 import ntpath

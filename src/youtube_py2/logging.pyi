@@ -4,6 +4,7 @@
 from __future__ import annotations
 from typing import Any
 from typing_extensions import Self
+from youtube_py2 import _bootstrap
 from youtube_py2.license import require_device_cert
 import logging
 
@@ -21,4 +22,5 @@ __name__ = ...
 
 # Modules used internally, to allow implicit dependencies to be seen:
 import youtube_py2
+import youtube_py2._bootstrap
 import youtube_py2.license

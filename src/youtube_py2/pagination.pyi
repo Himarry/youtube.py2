@@ -4,6 +4,7 @@
 from __future__ import annotations
 from typing import Any
 from typing_extensions import Self
+from youtube_py2 import _bootstrap
 import logging
 
 class YouTubePagination:
@@ -15,4 +16,6 @@ __name__ = ...
 
 
 # Modules used internally, to allow implicit dependencies to be seen:
+import youtube_py2
+import youtube_py2._bootstrap
 import logging

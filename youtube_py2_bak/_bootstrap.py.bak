@@ -1,0 +1,129 @@
+import os
+import sys
+import hashlib
+import json
+from pathlib import Path
+import base64
+try:
+    from cryptography.hazmat.primitives import hashes as c_hashes, serialization
+    from cryptography.hazmat.primitives.asymmetric import padding
+    from cryptography import x509
+    from cryptography.hazmat.backends import default_backend
+    CRYPTO_AVAILABLE = True
+except ImportError:
+    CRYPTO_AVAILABLE = False
+
+import datetime
+
+def _check_cert_expiry(cert_path):
+    with open(cert_path, "rb") as f:
+        cert = x509.load_pem_x509_certificate(f.read(), default_backend())
+    not_after = cert.not_valid_after
+    now = datetime.datetime.utcnow()
+    if now > not_after:
+        raise RuntimeError(f"device_cert.pemの有効期限切れ: {not_after} (現在: {now})")
+
+def _check_activation_expiry(days=7, dev_mode=False):
+    if dev_mode:
+        return  # 開発者証明書は完全無期限
+    info_path = Path(__file__).parent / "activation_info.json"
+    now = datetime.datetime.utcnow()
+    if info_path.exists():
+        with open(info_path, "r") as f:
+            info = json.load(f)
+        start = datetime.datetime.fromisoformat(info["start"])
+    else:
+        start = now
+        with open(info_path, "w") as f:
+            json.dump({"start": start.isoformat()}, f)
+    expire = start + datetime.timedelta(days=days)
+    if now > expire:
+        raise RuntimeError(f"利用開始から{days}日を超過しました（開始: {start} / 期限: {expire}）")
+
+def _internal_update():
+    # 証明書のパスを環境変数から取得できるようにする
+    env_cert = os.environ.get("YOUTUBE_PY2_LICENSE_CERT")
+    pubkey_path = None
+    dev_pubkey_path = None
+    cert_path = None
+    dev_mode = False
+    if env_cert:
+        cert_path = Path(env_cert)
+        # CNを確認して開発者証明書か判定
+        try:
+            from cryptography import x509
+            with open(cert_path, "rb") as f:
+                cert = x509.load_pem_x509_certificate(f.read(), default_backend())
+            cn = cert.subject.get_attributes_for_oid(x509.NameOID.COMMON_NAME)[0].value
+            if cn == "DeveloperCertificate":
+                dev_mode = True
+        except Exception:
+            pass
+    else:
+        pubkey_path = Path(__file__).parent.parent / "証明書" / "device_cert.pem"
+        dev_pubkey_path = Path(__file__).parent.parent / "証明書" / "developer_cert.pem"
+        if dev_pubkey_path and dev_pubkey_path.exists():
+            cert_path = dev_pubkey_path
+            dev_mode = True
+        elif pubkey_path and pubkey_path.exists():
+            cert_path = pubkey_path
+    if cert_path is None or not cert_path.exists():
+        raise RuntimeError("証明書ファイルが見つかりません。環境変数YOUTUBE_PY2_LICENSE_CERTまたはデフォルトパスを確認してください。")
+    _check_activation_expiry(7, dev_mode=dev_mode)
+    hashes_path = Path(__file__).parent / "binary_hashes.json"
+    bin_dir = Path(__file__).parent
+    if not hashes_path.exists():
+        raise RuntimeError("binary_hashes.jsonが見つかりません。バイナリ改ざん検知が出来なかった為、実行を中断します。")
+    with open(hashes_path, "r", encoding="utf-8") as f:
+        meta = json.load(f)
+    hashes = meta["hashes"] if "hashes" in meta else meta
+    if "signature" in meta and CRYPTO_AVAILABLE:
+        pubkey_path = Path(__file__).parent.parent / "証明書" / "device_cert.pem"
+        if pubkey_path.exists():
+            _check_cert_expiry(pubkey_path)
+            with open(pubkey_path, "rb") as pf:
+                pubkey = serialization.load_pem_public_key(pf.read())
+            hash_bytes = json.dumps(hashes, sort_keys=True, separators=(",", ":")).encode('utf-8')
+            signature = base64.b64decode(meta["signature"])
+            try:
+                pubkey.verify(signature, hash_bytes, padding.PKCS1v15(), c_hashes.SHA256())
+            except Exception as e:
+                raise RuntimeError(f"binary_hashes.jsonの署名検証に失敗: {e}")
+        else:
+            raise RuntimeError("device_cert.pem(公開鍵)が見つかりません。署名検証ができないため実行を中断します。")
+    for fname, info in hashes.items():
+        fpath = bin_dir / fname
+        if not fpath.exists():
+            raise RuntimeError(f"バイナリファイルが存在しません: {fpath}")
+        with open(fpath, "rb") as bf:
+            data = bf.read()
+        if "sha256" in info:
+            h = hashlib.sha256(data).hexdigest()
+            if h != info["sha256"]:
+                raise RuntimeError(f"改ざん検知: {fname} sha256不一致\n期待値: {info['sha256']}\n実際値: {h}")
+        if "sha512" in info:
+            h = hashlib.sha512(data).hexdigest()
+            if h != info["sha512"]:
+                raise RuntimeError(f"改ざん検知: {fname} sha512不一致\n期待値: {info['sha512']}\n実際値: {h}")
+        if "blake2b" in info:
+            h = hashlib.blake2b(data).hexdigest()
+            if h != info["blake2b"]:
+                raise RuntimeError(f"改ざん検知: {fname} blake2b不一致\n期待値: {info['blake2b']}\n実際値: {h}")
+        if "size" in info:
+            if len(data) != info["size"]:
+                raise RuntimeError(f"改ざん検知: {fname} サイズ不一致\n期待値: {info['size']}\n実際値: {len(data)}")
+        if "mtime" in info:
+            mtime = int(fpath.stat().st_mtime)
+            if mtime != info["mtime"]:
+                raise RuntimeError(f"改ざん検知: {fname} mtime不一致\n期待値: {info['mtime']}\n実際値: {mtime}")
+
+def _detect_debugger():
+    if hasattr(sys, 'gettrace') and sys.gettrace():
+        raise RuntimeError("デバッガ検知: 実行を中断します")
+    if os.name == "nt":
+        try:
+            import ctypes
+            if ctypes.windll.kernel32.IsDebuggerPresent() != 0:
+                raise RuntimeError("デバッガ検知: 実行を中断します")
+        except Exception:
+            pass

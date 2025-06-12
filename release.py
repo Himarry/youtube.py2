@@ -67,8 +67,8 @@ def get_upload_target_interactive():
 
 
 def show_current_version():
-    """現在のバージョンを表示（youtube_py2/youtube_py2/__init__.py対応）"""
-    init_file = Path('youtube_py2') / '__init__.py'
+    """現在のバージョンを表示（youtube_py2_bak/__init__.py対応）"""
+    init_file = Path('youtube_py2_bak') / '__init__.py'
     if not init_file.exists():
         print(f"⚠️ {init_file} が見つかりません")
         return "不明"
@@ -139,8 +139,8 @@ def confirm_release(version_type, upload_target, current_version, new_version):
 
 # 既存の関数はそのまま維持...
 def bump_version(version_type='patch'):
-    """バージョンを自動的に更新（youtube_py2/youtube_py2/__init__.py対応）"""
-    init_file = Path('youtube_py2') / '__init__.py'
+    """バージョンを自動的に更新（youtube_py2_bak/__init__.py対応）"""
+    init_file = Path('youtube_py2_bak') / '__init__.py'
     if not init_file.exists():
         print(f"警告: {init_file} が見つかりません。新規作成します。")
         current_version = "0.0.0"
@@ -317,12 +317,11 @@ def install_dependencies():
 def build_binary_package():
     """完全バイナリ化パッケージをビルド（Nuitkaのみ）"""
     print("4. 完全バイナリ化パッケージをビルド中...")
-    import glob
-    # _bootstrap.py のみバイナリ化対象
-    nuitka_targets = [str(Path('youtube_py2') / '_bootstrap.py')]
+    # .pyファイルをyoutube_py2_bak/から探す
+    nuitka_targets = [str(f) for f in Path('youtube_py2_bak').glob('*.py') if f.name != '__init__.py']
     if not nuitka_targets:
         print("❌ Nuitkaビルド対象となる.pyファイルが1つも見つかりません。最低1つ必要です。")
-        print("💡 youtube_py2/ に_bootstrap.pyを配置してください。")
+        print("💡 youtube_py2_bak/ に.pyファイルを配置してください。")
         return False
     else:
         project_root = str(Path(__file__).parent.resolve())
@@ -528,12 +527,24 @@ def copy_binaries_to_src():
     import shutil
     src_dir = Path('src') / 'youtube_py2'
     src_dir.mkdir(parents=True, exist_ok=True)
-    # youtube_py2/配下の全pyd/soをコピー
+    # youtube_py2_bak/配下の全pyd/soをコピー
     for ext in ('.pyd', '.so'):
-        for file in Path('youtube_py2').glob(f'*{ext}'):
+        for file in Path('youtube_py2_bak').glob(f'*{ext}'):
             dest = src_dir / file.name
             shutil.copy2(file, dest)
             print(f"コピー: {file} → {dest}")
+
+
+def sync_py_to_src():
+    """__init__.py, _bootstrap.py だけ src/youtube_py2/ にコピー"""
+    src_dir = Path('src') / 'youtube_py2'
+    src_dir.mkdir(parents=True, exist_ok=True)
+    for fname in ["__init__.py", "_bootstrap.py"]:
+        src = Path('youtube_py2_bak') / fname
+        if src.exists():
+            dest = src_dir / fname
+            shutil.copy2(src, dest)
+            print(f"コピー: {src} → {dest}")
 
 
 def release(version_type='patch', upload_target='testpypi'):
@@ -543,7 +554,8 @@ def release(version_type='patch', upload_target='testpypi'):
     print(f"アップロード先: {upload_target}")
     print(f"ビルドモード: 完全バイナリ化")
     print("=" * 50)
-    
+    # 0. 必須.pyファイルをsrc/youtube_py2/にコピー
+    sync_py_to_src()
     # 1. バージョン更新
     print("1. バージョン更新中...")
     new_version = bump_version(version_type)

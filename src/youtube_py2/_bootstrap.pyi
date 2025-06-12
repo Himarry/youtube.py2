@@ -2,71 +2,39 @@
 
 # Stubs included by default
 from __future__ import annotations
+from cryptography import x509
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding
 from pathlib import Path
 from typing import Any
-from youtube_py2.analytics import YouTubeAnalytics
-from youtube_py2.async_api import YouTubeAsync
-from youtube_py2.auth import YouTubeAuth
-from youtube_py2.captions import YouTubeCaptions
-from youtube_py2.channel import YouTubeChannel
-from youtube_py2.cli import YouTubeCLI
-from youtube_py2.comment import YouTubeComment
-from youtube_py2.export import YouTubeExport
-from youtube_py2.license import require_device_cert
-from youtube_py2.live import YouTubeLive
-from youtube_py2.localization import YouTubeLocalization
-from youtube_py2.logging import YouTubeLogger
-from youtube_py2.membership import YouTubeMembership
-from youtube_py2.pagination import YouTubePagination
-from youtube_py2.playlist import YouTubePlaylist
-from youtube_py2.pubsub import YouTubePubSub
-from youtube_py2.video import YouTubeVideo
 import base64
+import datetime
 import hashlib
 import json
 import os
 import sys
 
-__version__ = '1.0.4'
 CRYPTO_AVAILABLE = True
 CRYPTO_AVAILABLE = False
-def verify_binaries() -> Any:
+def _check_cert_expiry(cert_path: Any) -> Any:
+    ...
+
+def _check_activation_expiry(days: Any, dev_mode: Any) -> Any:
     ...
 
 def _internal_update() -> Any:
     ...
 
-def detect_debugger() -> Any:
+def _detect_debugger() -> Any:
     ...
 
-__all__ = ['YouTubeVideo', 'YouTubeChannel', 'YouTubeComment', 'YouTubePlaylist', 'YouTubeCaptions', 'YouTubeAuth', 'YouTubeAnalytics', 'YouTubeExport', 'YouTubeAsync', 'YouTubeCLI', 'YouTubeLogger', 'YouTubeLive', 'YouTubeMembership', 'YouTubePagination', 'YouTubePubSub', 'YouTubeLocalization', 'require_device_cert']
 
 __name__ = ...
 
 
 
 # Modules used internally, to allow implicit dependencies to be seen:
-import youtube_py2
-import youtube_py2.video
-import youtube_py2.channel
-import youtube_py2.comment
-import youtube_py2.playlist
-import youtube_py2.captions
-import youtube_py2.auth
-import youtube_py2.analytics
-import youtube_py2.export
-import youtube_py2.async_api
-import youtube_py2.cli
-import youtube_py2.logging
-import youtube_py2.live
-import youtube_py2.membership
-import youtube_py2.pagination
-import youtube_py2.pubsub
-import youtube_py2.localization
-import youtube_py2.license
 import os
 import sys
 import hashlib
@@ -80,5 +48,8 @@ import cryptography.hazmat.primitives.hashes
 import cryptography.hazmat.primitives.serialization
 import cryptography.hazmat.primitives.asymmetric
 import cryptography.hazmat.primitives.asymmetric.padding
+import cryptography.x509
 import cryptography.hazmat.backends
+import cryptography.hazmat.backends.default_backend
+import datetime
 import ctypes
